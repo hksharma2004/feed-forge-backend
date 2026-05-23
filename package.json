@@ -1,0 +1,6 @@
+{
+  "private": true,
+  "dependencies": {
+    "@open-gitagent/gitagent": "0.2.0"
+  }
+}

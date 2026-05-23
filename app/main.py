@@ -87,6 +87,11 @@ app.add_middleware(
 )
 
 
+@app.get("/")
+def root() -> dict[str, str]:
+    return {"status": "ok", "service": "FeedForge API"}
+
+
 class CampaignCreate(BaseModel):
     name: str = Field(min_length=1)
     voice: str = Field(min_length=1)
