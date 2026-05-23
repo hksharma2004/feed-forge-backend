@@ -3,8 +3,8 @@ services:
     name: feedforge-api
     env: python
     plan: free
-    buildCommand: npm install && pip install -r requirements.txt
-    startCommand: PATH=$PWD/node_modules/.bin:$PATH uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    buildCommand: npm ci && pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.10

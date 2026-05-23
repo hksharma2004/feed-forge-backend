@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import sqlite3
 import subprocess
 from datetime import datetime, timedelta, timezone
@@ -221,19 +222,25 @@ def get_campaign(campaign_id: str, owner_id: Optional[str] = None) -> dict[str, 
 
 
 def run_gitagent(args: list[str], repo_path: Path, capture: bool = False) -> str:
+    local_gitagent = APP_ROOT / "node_modules" / ".bin" / "gitagent"
+    gitagent_cmd = str(local_gitagent) if local_gitagent.exists() else shutil.which("gitagent")
+    if not gitagent_cmd:
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "gitagent CLI is not installed. Run npm ci during build so "
+                f"{local_gitagent} exists, or install @open-gitagent/gitagent globally. "
+                f"Current PATH: {os.getenv('PATH', '')}"
+            ),
+        )
     try:
         result = subprocess.run(
-            ["gitagent", *args],
+            [gitagent_cmd, *args],
             cwd=repo_path,
             capture_output=capture,
             text=True,
             check=True,
         )
-    except FileNotFoundError as exc:
-        raise HTTPException(
-            status_code=500,
-            detail="gitagent CLI is not installed. Install @open-gitagent/gitagent and ensure gitagent is on PATH.",
-        ) from exc
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or exc.stdout or str(exc)).strip()
         raise HTTPException(status_code=500, detail=f"gitagent failed: {detail}") from exc
