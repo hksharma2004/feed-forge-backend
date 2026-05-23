@@ -106,6 +106,31 @@ def signal_rows(signals: dict[str, float], violations: list[str]) -> list[dict[s
     return rows
 
 
+def add_legacy_score_fields(scores: dict[str, Any]) -> dict[str, Any]:
+    signals = scores.get("x_algorithm_signal_scores")
+    if not isinstance(signals, dict):
+        signals = {}
+
+    positive_scores = [
+        scores.get("brand_score"),
+        scores.get("like"),
+        scores.get("reply"),
+        scores.get("repost"),
+        scores.get("quote"),
+        scores.get("view"),
+        scores.get("impression"),
+    ]
+    click_values = [normalize_score(value) for value in positive_scores]
+    scores["click"] = normalize_score(sum(click_values) / len(click_values)) if click_values else 0.0
+
+    penalty = normalize_score(signals.get("penalty_score", scores.get("block")))
+    authenticity_gap = 1.0 - normalize_score(signals.get("authenticity_score", 1.0))
+    relevance_gap = 1.0 - normalize_score(signals.get("relevance_score", 1.0))
+    scores["block"] = penalty
+    scores["mute"] = normalize_score((penalty + authenticity_gap + relevance_gap) / 3)
+    return scores
+
+
 def is_current_score(scores: dict[str, Any]) -> bool:
     signals = scores.get("x_algorithm_signal_scores")
     return isinstance(signals, dict) and all(key in signals for key in SIGNAL_KEYS)
@@ -132,13 +157,15 @@ def normalize_scores(data: dict[str, Any]) -> dict[str, Any]:
     scores["rewrites"] = [str(item) for item in rewrites[:2]]
     while len(scores["rewrites"]) < 2:
         scores["rewrites"].append("Improve the weakest X algorithm signal with a clearer hook, stronger reply intent, or lower penalty risk.")
-    return scores
+    return add_legacy_score_fields(scores)
 
 
 async def score_draft(campaign: dict[str, Any], draft: str, system_prompt: Optional[str] = None) -> dict[str, Any]:
     campaign_id: str = campaign["id"]
     cached = get_cached_score(campaign_id, draft)
     if cached is not None and is_current_score(cached):
+        add_legacy_score_fields(cached)
+        set_cached_score(campaign_id, draft, cached)
         return cached
 
     prompt = system_prompt or load_system_prompt(Path(campaign["repo_path"]))
