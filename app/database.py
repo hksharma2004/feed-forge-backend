@@ -11,6 +11,8 @@ from fastapi import HTTPException
 
 from app.config import DB_PATH
 
+CAMPAIGN_COLUMNS = "id, name, platform, repo_path, created_at, owner_id"
+
 
 def init_db() -> None:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -42,20 +44,22 @@ def init_db() -> None:
         conn.commit()
 
 
+def _connect() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
 def get_campaign(campaign_id: str, owner_id: Optional[str] = None) -> dict[str, Any]:
     init_db()
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.row_factory = sqlite3.Row
-        if owner_id:
-            row = conn.execute(
-                "SELECT id, name, platform, repo_path, created_at, owner_id FROM campaigns WHERE id = ? AND owner_id = ?",
-                (campaign_id, owner_id),
-            ).fetchone()
-        else:
-            row = conn.execute(
-                "SELECT id, name, platform, repo_path, created_at, owner_id FROM campaigns WHERE id = ?",
-                (campaign_id,),
-            ).fetchone()
+    query = f"SELECT {CAMPAIGN_COLUMNS} FROM campaigns WHERE id = ?"
+    params: tuple[str, ...] = (campaign_id,)
+    if owner_id:
+        query += " AND owner_id = ?"
+        params += (owner_id,)
+
+    with _connect() as conn:
+        row = conn.execute(query, params).fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Campaign not found")
     return dict(row)
@@ -63,17 +67,15 @@ def get_campaign(campaign_id: str, owner_id: Optional[str] = None) -> dict[str, 
 
 def list_campaign_rows(owner_id: Optional[str] = None) -> list[dict[str, Any]]:
     init_db()
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.row_factory = sqlite3.Row
-        if owner_id:
-            rows = conn.execute(
-                "SELECT id, name, platform, repo_path, created_at, owner_id FROM campaigns WHERE owner_id = ? ORDER BY created_at DESC",
-                (owner_id,),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT id, name, platform, repo_path, created_at, owner_id FROM campaigns ORDER BY created_at DESC"
-            ).fetchall()
+    query = f"SELECT {CAMPAIGN_COLUMNS} FROM campaigns"
+    params: tuple[str, ...] = ()
+    if owner_id:
+        query += " WHERE owner_id = ?"
+        params = (owner_id,)
+    query += " ORDER BY created_at DESC"
+
+    with _connect() as conn:
+        rows = conn.execute(query, params).fetchall()
     return [dict(row) for row in rows]
 
 

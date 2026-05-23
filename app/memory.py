@@ -10,6 +10,20 @@ from app.text_utils import normalize_score
 MEMORY_RETENTION_DAYS = 20
 
 
+def _memory_path(repo_path: Path, filename: str) -> Path:
+    return repo_path / "memory" / filename
+
+
+def _read_text(path: Path) -> str:
+    return path.read_text(encoding="utf-8") if path.exists() else ""
+
+
+def _format_memory_entry(content: str, metadata: dict[str, object]) -> str:
+    lines = [f"\n---\n{content}"]
+    lines.extend(f"({key}: {value})" for key, value in metadata.items())
+    return "\n".join(lines)
+
+
 def parse_memory_entries(text: str, kind: str) -> list[dict[str, Any]]:
     entries = []
     for block in [item.strip() for item in text.split("---") if item.strip()]:
@@ -39,8 +53,7 @@ def parse_memory_entries(text: str, kind: str) -> list[dict[str, Any]]:
 
 
 def prune_rejected_memory(path: Path) -> list[dict[str, Any]]:
-    text = path.read_text(encoding="utf-8") if path.exists() else ""
-    entries = parse_memory_entries(text, "rejected")
+    entries = parse_memory_entries(_read_text(path), "rejected")
     cutoff = datetime.now(timezone.utc) - timedelta(days=MEMORY_RETENTION_DAYS)
     kept = []
     for item in entries:
@@ -55,7 +68,13 @@ def prune_rejected_memory(path: Path) -> list[dict[str, Any]]:
     if len(kept) != len(entries):
         path.write_text(
             "".join(
-                f"\n---\n{item['content']}\n(reason: {item.get('reason', '')})\n(created_at: {item.get('created_at') or datetime.now(timezone.utc).isoformat()})"
+                _format_memory_entry(
+                    item["content"],
+                    {
+                        "reason": item.get("reason", ""),
+                        "created_at": item.get("created_at") or datetime.now(timezone.utc).isoformat(),
+                    },
+                )
                 for item in kept
             ),
             encoding="utf-8",
@@ -64,24 +83,29 @@ def prune_rejected_memory(path: Path) -> list[dict[str, Any]]:
 
 
 def read_campaign_library(repo_path: Path) -> dict[str, list[dict[str, Any]]]:
-    memory_dir = repo_path / "memory"
-    approved_path = memory_dir / "approved.md"
-    rejected_path = memory_dir / "rejected.md"
-    approved = parse_memory_entries(approved_path.read_text(encoding="utf-8"), "approved") if approved_path.exists() else []
-    rejected = prune_rejected_memory(rejected_path) if rejected_path.exists() else []
+    approved = parse_memory_entries(_read_text(_memory_path(repo_path, "approved.md")), "approved")
+    rejected = prune_rejected_memory(_memory_path(repo_path, "rejected.md"))
     return {"approved": list(reversed(approved)), "rejected": list(reversed(rejected))}
 
 
 def append_approved(repo_path: Path, content: str, brand_score: float) -> None:
-    approved_path = repo_path / "memory" / "approved.md"
+    approved_path = _memory_path(repo_path, "approved.md")
     with approved_path.open("a", encoding="utf-8") as file:
         file.write(
-            f"\n---\n{content}\n(score: {brand_score})\n(created_at: {datetime.now(timezone.utc).isoformat()})"
+            _format_memory_entry(
+                content,
+                {"score": brand_score, "created_at": datetime.now(timezone.utc).isoformat()},
+            )
         )
 
 
 def append_rejected(repo_path: Path, content: str, reason: str) -> None:
-    rejected_path = repo_path / "memory" / "rejected.md"
+    rejected_path = _memory_path(repo_path, "rejected.md")
     prune_rejected_memory(rejected_path)
     with rejected_path.open("a", encoding="utf-8") as file:
-        file.write(f"\n---\n{content}\n(reason: {reason})\n(created_at: {datetime.now(timezone.utc).isoformat()})")
+        file.write(
+            _format_memory_entry(
+                content,
+                {"reason": reason, "created_at": datetime.now(timezone.utc).isoformat()},
+            )
+        )

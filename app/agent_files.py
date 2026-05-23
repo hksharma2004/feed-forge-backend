@@ -6,6 +6,10 @@ from pathlib import Path
 from app.schemas import CampaignCreate
 
 
+def _read_optional(path: Path) -> str:
+    return path.read_text(encoding="utf-8") if path.exists() else ""
+
+
 def read_agent_metadata(repo_path: Path) -> dict[str, str]:
     metadata: dict[str, str] = {}
     agent_path = repo_path / "agent.yaml"
@@ -21,8 +25,8 @@ def read_agent_metadata(repo_path: Path) -> dict[str, str]:
 
 def load_system_prompt(repo_path: Path) -> str:
     metadata = read_agent_metadata(repo_path)
-    soul = (repo_path / "SOUL.md").read_text(encoding="utf-8") if (repo_path / "SOUL.md").exists() else ""
-    rules = (repo_path / "RULES.md").read_text(encoding="utf-8") if (repo_path / "RULES.md").exists() else ""
+    soul = _read_optional(repo_path / "SOUL.md")
+    rules = _read_optional(repo_path / "RULES.md")
     name = metadata.get("name", "FeedForge Agent")
     description = metadata.get("description", "")
     return f"# {name}\n\n{description}\n\n{soul}\n\n{rules}".strip()
